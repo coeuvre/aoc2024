@@ -62,20 +62,27 @@ fn visited(track: *const Track, x: i32, y: i32, dx: i32, dy: i32) bool {
     return track.get(Footprint{ .x = x, .y = y, .dx = dx, .dy = dy }) != null;
 }
 
-fn hasLoop(arena: std.mem.Allocator, map: [][]u8) !bool {
-    var x: i32 = 0;
-    var y: i32 = 0;
-    find_start: for (map, 0..) |row, row_index| {
+fn findStart(map: [][]const u8) Footprint {
+    for (map, 0..) |row, row_index| {
         for (row, 0..) |cell, cell_index| {
             if (cell == '^') {
-                x = @intCast(cell_index);
-                y = @intCast(row_index);
-                break :find_start;
+                return Footprint{
+                    .x = @intCast(cell_index),
+                    .y = @intCast(row_index),
+                    .dx = 0,
+                    .dy = -1,
+                };
             }
         }
     }
-    var dx: i32 = 0;
-    var dy: i32 = -1;
+    unreachable;
+}
+
+fn hasLoop(arena: std.mem.Allocator, map: [][]u8, start: Footprint) !bool {
+    var x: i32 = start.x;
+    var y: i32 = start.y;
+    var dx: i32 = start.dx;
+    var dy: i32 = start.dy;
 
     var track = Track.init(arena);
     try record(&track, x, y, dx, dy);
@@ -119,17 +126,27 @@ pub fn main() !void {
         try map.append(line);
     }
 
+    const start = findStart(map.items);
+
+    const route = try dupeMap(gpa, map.items);
+    {
+        var x: i32 = start.x;
+        var y: i32 = start.y;
+        var dx: i32 = start.dx;
+        var dy: i32 = start.dy;
+        while (step(route, &x, &y, &dx, &dy)) {}
+    }
+
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     const arena = arena_state.allocator();
-
     var count: u32 = 0;
-    for (map.items, 0..) |row, y| {
+    for (route, 0..) |row, y| {
         for (row, 0..) |cell, x| {
-            if (cell != '^' and cell != '#') {
+            if (cell != '^' and cell != '#' and cell != '.') {
                 defer _ = arena_state.reset(.retain_capacity);
                 const new_map = try dupeMap(arena, map.items);
                 new_map[y][x] = 'O';
-                if (try hasLoop(arena, new_map)) {
+                if (try hasLoop(arena, new_map, start)) {
                     count += 1;
                     // printMap(new_map);
                     // std.debug.print("\n", .{});
