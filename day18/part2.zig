@@ -49,7 +49,12 @@ fn visit(map: []const u8, dim: i32, pq: *NodePriorityQueue, dist_map: *DistMap, 
     }
 }
 
-fn hasExit(arena: std.mem.Allocator, map: []const u8, dim: i32) !bool {
+fn hasExit(arena: std.mem.Allocator, dim: i32, pos_list: []const Vec2) !bool {
+    const map = try arena.alloc(u8, @intCast(dim * dim));
+    for (pos_list) |p| {
+        map[@intCast(p.y * dim + p.x)] = '#';
+    }
+
     const start = Vec2{ .x = 0, .y = 0 };
     const end = Vec2{ .x = dim - 1, .y = dim - 1 };
 
@@ -77,6 +82,16 @@ fn hasExit(arena: std.mem.Allocator, map: []const u8, dim: i32) !bool {
     return dist_map.get(end) != null;
 }
 
+const Context = struct {
+    arena: std.mem.Allocator,
+    dim: i32,
+    pos_list: []const Vec2,
+};
+
+fn predicate(context: Context, index: usize) bool {
+    return hasExit(context.arena, context.dim, context.pos_list[0..(index + 1)]) catch unreachable;
+}
+
 pub fn main() !void {
     const input: [:0]const u8 = @embedFile("input.txt");
 
@@ -86,8 +101,9 @@ pub fn main() !void {
     const arena = arena_state.allocator();
 
     const dim: i32 = 71;
-    const map = try gpa.alloc(u8, @intCast(dim * dim));
 
+    var pos_list = std.ArrayList(Vec2).init(gpa);
+    var index_list = std.ArrayList(usize).init(gpa);
     var line_iter = std.mem.tokenizeScalar(u8, input, '\n');
     while (line_iter.next()) |line| {
         var num_iter = std.mem.tokenizeScalar(u8, line, ',');
@@ -95,12 +111,16 @@ pub fn main() !void {
             .x = try std.fmt.parseInt(i32, num_iter.next().?, 10),
             .y = try std.fmt.parseInt(i32, num_iter.next().?, 10),
         };
-        map[@intCast(p.y * dim + p.x)] = '#';
-
-        _ = arena_state.reset(.retain_capacity);
-        if (!(try hasExit(arena, map, dim))) {
-            std.debug.print("{},{}\n", .{ p.x, p.y });
-            break;
-        }
+        try pos_list.append(p);
+        try index_list.append(index_list.items.len);
     }
+
+    const context = Context{
+        .arena = arena,
+        .dim = dim,
+        .pos_list = pos_list.items,
+    };
+    const i = std.sort.partitionPoint(usize, index_list.items, context, predicate);
+    const p = pos_list.items[i];
+    std.debug.print("{},{}\n", .{ p.x, p.y });
 }
