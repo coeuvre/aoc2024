@@ -38,7 +38,6 @@ pub fn main() !void {
     var total: i64 = 0;
     var cache = Cache.init(gpa);
     while (line_iter.next()) |line| {
-        cache.clearRetainingCapacity();
         total += try solve(&cache, patterns.items, line);
     }
 
